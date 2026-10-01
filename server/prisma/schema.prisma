@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  EMPLOYEE
+  MANAGER
+  HR_ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  MISSING_CHECKOUT
+}
+
+enum AttendanceSource {
+  MANUAL
+  ADMIN
+}
+
+enum LeaveType {
+  CASUAL
+  SICK
+  ANNUAL
+  UNPAID
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model Organisation {
+  id         String       @id @default(uuid())
+  name       String
+  timezone   String       @default("Asia/Kolkata")
+
+  users      User[]
+  departments Department[]
+  shifts     Shift[]
+  leaves     Leave[]
+
+  createdAt  DateTime     @default(now())
+}
+
+model Department {
+  id             String       @id @default(uuid())
+  name           String
+  organisationId String
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  users        User[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([organisationId, name])
+}
+
+model Shift {
+  id             String       @id @default(uuid())
+  name           String
+  startMinutes   Int          @default(540)
+  endMinutes     Int          @default(1080)
+  graceMinutes   Int          @default(15)
+  requiredMinutes Int         @default(480)
+  organisationId String
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  users        User[]
+  attendance   Attendance[]
+
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id             String     @id @default(uuid())
+  employeeCode   String
+  name           String
+  email          String
+  passwordHash   String
+  role           Role       @default(EMPLOYEE)
+  status         UserStatus @default(ACTIVE)
+
+  organisationId String
+  departmentId   String?
+  shiftId        String?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  department   Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  shift        Shift?        @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+
+  attendance Attendance[]
+
+  leaveRequests  Leave[] @relation("LeaveEmployee")
+  leaveApprovals Leave[] @relation("LeaveApprover")
+
+  createdAt DateTime @default(now())
+
+  @@unique([organisationId, employeeCode])
+  @@unique([organisationId, email])
+}
+
+model Attendance {
+  id             String           @id @default(uuid())
+  workDate       DateTime         @db.Date
+  checkInAt      DateTime?
+  checkOutAt     DateTime?
+  status         AttendanceStatus
+  source         AttendanceSource @default(MANUAL)
+  workedMinutes  Int?
+
+  employeeId String
+  shiftId    String?
+
+  employee User  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shift    Shift? @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, workDate])
+  @@index([workDate])
+}
+
+model Leave {
+  id             String      @id @default(uuid())
+
+  employeeId     String
+  organisationId String
+
+  employee       User         @relation("LeaveEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  type           LeaveType
+  startDate      DateTime    @db.Date
+  endDate        DateTime    @db.Date
+  days           Int
+  reason         String
+
+  status         LeaveStatus @default(PENDING)
+
+  approverId     String?
+  approver       User?       @relation("LeaveApprover", fields: [approverId], references: [id], onDelete: SetNull)
+
+  approvalComment String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([organisationId])
+  @@index([status])
+  @@index([startDate, endDate])
+}
