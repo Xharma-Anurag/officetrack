@@ -1,1 +1,176 @@
-import 'dotenv/config';import bcrypt from 'bcryptjs';import {PrismaClient} from '@prisma/client';const prisma=new PrismaClient();const organisationName='OfficeTrack Demo Organisation';const staff=['Aarav Sharma','Diya Patel','Rohan Mehta','Ananya Iyer','Vivaan Gupta','Ishita Singh','Arjun Nair','Kavya Reddy','Aditya Verma','Meera Joshi','Kabir Khan','Sana Kapoor','Rahul Das','Neha Agarwal','Karan Malhotra','Pooja Bansal','Siddharth Jain','Priya Menon','Varun Rao','Nisha Shah','Harsh Vardhan','Aditi Kulkarni','Manish Kumar','Simran Kaur','Dev Patel'];const passwordHash=await bcrypt.hash('Employee@123',12);const adminHash=await bcrypt.hash('Admin@123',12);const org=(await prisma.organisation.findFirst({where:{name:organisationName}}))||await prisma.organisation.create({data:{name:organisationName}});const departments=await Promise.all(['Engineering','Human Resources','Finance','Operations','Sales'].map(name=>prisma.department.upsert({where:{organisationId_name:{organisationId:org.id,name}},update:{},create:{name,organisationId:org.id}})));let shift=await prisma.shift.findFirst({where:{organisationId:org.id,name:'General Shift'}});if(!shift)shift=await prisma.shift.create({data:{name:'General Shift',organisationId:org.id}});await prisma.user.upsert({where:{organisationId_email:{organisationId:org.id,email:'admin@officetrack.local'}},update:{name:'Admin User',employeeCode:'ADM001',passwordHash:adminHash,role:'HR_ADMIN',status:'ACTIVE',departmentId:departments[1].id,shiftId:shift.id},create:{name:'Admin User',email:'admin@officetrack.local',employeeCode:'ADM001',passwordHash:adminHash,role:'HR_ADMIN',organisationId:org.id,departmentId:departments[1].id,shiftId:shift.id}});const users=[];for(const [index,name] of staff.entries()){const email=index===0?'employee@officetrack.local':`${name.toLowerCase().replace(/[^a-z]+/g,'.').replace(/\.$/,'')}@officetrack.local`;const user=await prisma.user.upsert({where:{organisationId_email:{organisationId:org.id,email}},update:{name,employeeCode:`EMP${String(index+1).padStart(3,'0')}`,passwordHash,status:'ACTIVE',role:index===0?'MANAGER':'EMPLOYEE',departmentId:departments[index%departments.length].id,shiftId:shift.id},create:{name,email,employeeCode:`EMP${String(index+1).padStart(3,'0')}`,passwordHash,role:index===0?'MANAGER':'EMPLOYEE',organisationId:org.id,departmentId:departments[index%departments.length].id,shiftId:shift.id}});users.push(user);}const now=new Date();const workDate=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()));for(const [index,user] of users.entries()){if(index>=22)continue;const late=index>=18;const checkInAt=new Date(workDate);checkInAt.setUTCHours(late?4:3,late?30+index:35+index,0,0);const missingCheckout=index===21;const checkOutAt=missingCheckout?null:new Date(checkInAt.getTime()+(late?480:510)*60000);await prisma.attendance.upsert({where:{employeeId_workDate:{employeeId:user.id,workDate}},update:{checkInAt,checkOutAt,status:missingCheckout?'MISSING_CHECKOUT':late?'LATE':'PRESENT',workedMinutes:checkOutAt?Math.round((checkOutAt-checkInAt)/60000):null,shiftId:shift.id},create:{employeeId:user.id,workDate,checkInAt,checkOutAt,status:missingCheckout?'MISSING_CHECKOUT':late?'LATE':'PRESENT',workedMinutes:checkOutAt?Math.round((checkOutAt-checkInAt)/60000):null,shiftId:shift.id}});}console.log('Seed complete: 1 admin, 25 employees, and today’s sample attendance.');await prisma.$disconnect();
+import 'dotenv/config';
+import bcrypt from 'bcryptjs';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+const organisationName = 'OfficeTrack Organisation';
+
+const accounts = [
+  {
+    name: 'Owner 1',
+    email: 'owner1@officetrack.local',
+    employeeCode: 'OWN001',
+    role: 'SUPER_ADMIN',
+    department: 'Management',
+    password: 'Owner@123',
+  },
+  {
+    name: 'Owner 2',
+    email: 'owner2@officetrack.local',
+    employeeCode: 'OWN002',
+    role: 'SUPER_ADMIN',
+    department: 'Management',
+    password: 'Owner@123',
+  },
+  {
+    name: 'HR Manager',
+    email: 'hrmanager@officetrack.local',
+    employeeCode: 'HRM001',
+    role: 'MANAGER',
+    department: 'Human Resources',
+    password: 'Manager@123',
+  },
+  {
+    name: 'Sales Manager 1',
+    email: 'sales1@officetrack.local',
+    employeeCode: 'SAL001',
+    role: 'MANAGER',
+    department: 'Sales',
+    password: 'Manager@123',
+  },
+  {
+    name: 'Sales Manager 2',
+    email: 'sales2@officetrack.local',
+    employeeCode: 'SAL002',
+    role: 'MANAGER',
+    department: 'Sales',
+    password: 'Manager@123',
+  },
+  {
+    name: 'HR Executive',
+    email: 'hrexecutive@officetrack.local',
+    employeeCode: 'HRE001',
+    role: 'EMPLOYEE',
+    department: 'Human Resources',
+    password: 'Employee@123',
+  },
+];
+
+async function main() {
+  console.log('Starting OfficeTrack production seed...');
+
+  // Organisation
+  const organisation =
+    (await prisma.organisation.findFirst({
+      where: { name: organisationName },
+    })) ||
+    (await prisma.organisation.create({
+      data: {
+        name: organisationName,
+      },
+    }));
+
+  // Departments
+  const departmentNames = [
+    'Management',
+    'Human Resources',
+    'Sales',
+  ];
+
+  const departments = {};
+
+  for (const name of departmentNames) {
+    departments[name] = await prisma.department.upsert({
+      where: {
+        organisationId_name: {
+          organisationId: organisation.id,
+          name,
+        },
+      },
+      update: {},
+      create: {
+        name,
+        organisationId: organisation.id,
+      },
+    });
+  }
+
+  // General Shift
+  let shift = await prisma.shift.findFirst({
+    where: {
+      organisationId: organisation.id,
+      name: 'General Shift',
+    },
+  });
+
+  if (!shift) {
+    shift = await prisma.shift.create({
+      data: {
+        name: 'General Shift',
+        organisationId: organisation.id,
+      },
+    });
+  }
+
+  // Create / update test accounts
+  for (const account of accounts) {
+    const passwordHash = await bcrypt.hash(account.password, 12);
+
+    await prisma.user.upsert({
+      where: {
+        organisationId_email: {
+          organisationId: organisation.id,
+          email: account.email,
+        },
+      },
+      update: {
+        name: account.name,
+        employeeCode: account.employeeCode,
+        passwordHash,
+        role: account.role,
+        status: 'ACTIVE',
+        departmentId: departments[account.department].id,
+        shiftId: shift.id,
+      },
+      create: {
+        name: account.name,
+        email: account.email,
+        employeeCode: account.employeeCode,
+        passwordHash,
+        role: account.role,
+        status: 'ACTIVE',
+        organisationId: organisation.id,
+        departmentId: departments[account.department].id,
+        shiftId: shift.id,
+      },
+    });
+
+    console.log(`Created/updated: ${account.email}`);
+  }
+
+  console.log('');
+  console.log('======================================');
+  console.log('OfficeTrack seed completed successfully');
+  console.log('======================================');
+  console.log('');
+  console.log('Test accounts:');
+  console.log('Owner 1       → owner1@officetrack.local');
+  console.log('Owner 2       → owner2@officetrack.local');
+  console.log('HR Manager    → hrmanager@officetrack.local');
+  console.log('Sales Manager → sales1@officetrack.local');
+  console.log('Sales Manager → sales2@officetrack.local');
+  console.log('HR Executive  → hrexecutive@officetrack.local');
+  console.log('');
+  console.log('No sample attendance was created.');
+  console.log('======================================');
+}
+
+main()
+  .catch((error) => {
+    console.error('Seed failed:', error);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
