@@ -1,5 +1,5 @@
 import React from "react";
-import{
+import {
   createContext,
   useContext,
   useState,
@@ -11,7 +11,7 @@ const C = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() =>
-    JSON.parse(localStorage.getItem("user") || "null")
+    JSON.parse(sessionStorage.getItem("user") || "null")
   );
 
   async function login(email, password) {
@@ -34,14 +34,15 @@ export function AuthProvider({ children }) {
   }
 
   function saveSession(data) {
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("user", JSON.stringify(data.user));
+    sessionStorage.setItem("token", data.token);
+    sessionStorage.setItem("user", JSON.stringify(data.user));
 
     setUser(data.user);
   }
 
   function logout() {
-    localStorage.clear();
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("user");
     setUser(null);
   }
 
@@ -53,3 +54,4 @@ export function AuthProvider({ children }) {
 }
 
 export const useAuth = () => useContext(C);
+```
